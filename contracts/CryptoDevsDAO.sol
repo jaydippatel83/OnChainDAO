@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+
 // Interface for the FakeNFTMarketplace
 interface IFakeNFTMarketplace {
     /// @dev nftPurchasePrice() reads the value of the public uint256 variable `nftPurchasePrice`
@@ -50,7 +52,7 @@ interface ICryptoDevsNFT {
     function ownerOf(uint256 tokenId) external view returns (address owner);
 }
 
-contract CryptoDevsDAO {
+contract CryptoDevsDAO is IERC721Receiver {
     IFakeNFTMarketplace nftMarketplace;
     ICryptoDevsNFT cryptoDevsNft;
 
@@ -84,6 +86,7 @@ contract CryptoDevsDAO {
 
     mapping(uint256 => Proposal) public proposals;
     mapping(address => Member) public members;
+    mapping(uint256 => bool) public tokenLockedUp;
 
     uint256 public numProposals;
     uint256 public totalVotingPower;
@@ -153,9 +156,38 @@ contract CryptoDevsDAO {
                 nftMarketplace.purchase{value: purchasePrice}(
                     proposal.nftTokenId
                 );
-            }else{
+            } else {
                 nftMarketplace.sell(proposal.nftTokenId);
             }
         }
+    }
+
+    function onERC721Receivered(
+        address,
+        address from,
+        uint256 tokenId,
+        bytes memory
+    ) public override returns (bytes4) {
+        require(cryptoDevsNft.ownerOf(tokenId) == address(this), "MALICIOUS");
+        require(tokenLockedUp[tokenId] == false, "ALREADY_USED"); 
+        Member storage member = members[from];
+        if (member.lockedUpNfts.length == 0) {
+            member.joinedAt = block.timestamp;
+        }
+        totalVotingPower++;
+        members[from].lockedUpNfts.push(tokenId);
+        return this.onERC721Receivered.selector;
+    }
+
+    function quit() external memberOnly{
+        Member storage member = members[msg.sender];
+        require(block.timestamp - member.joinedAt > 10 minutes, "MIN_MEMBERSHIP_PERIOUD");
+        uint256 share = (address(this).balance * member.lockedUpNfts.length)/ totalVotingPower;
+        totalVotingPower -= member.lockedUpNfts.length;
+        payable(msg.sender).transfer(share);
+        for (uint256 index = 0; index < member.lockedUpNfts.length; index++) {
+            cryptoDevsNft.safeTransferFrom(address(this), msg.sender, member.lockedUpNfts[index], "");
+        } 
+        delete members[msg.sender];
     }
 }
