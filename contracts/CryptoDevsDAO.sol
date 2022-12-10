@@ -167,7 +167,7 @@ contract CryptoDevsDAO is IERC721Receiver {
         address from,
         uint256 tokenId,
         bytes memory
-    ) public override returns (bytes4) {
+    ) public  returns (bytes4) {
         require(cryptoDevsNft.ownerOf(tokenId) == address(this), "MALICIOUS");
         require(tokenLockedUp[tokenId] == false, "ALREADY_USED"); 
         Member storage member = members[from];
@@ -179,7 +179,7 @@ contract CryptoDevsDAO is IERC721Receiver {
         return this.onERC721Receivered.selector;
     }
 
-    function quit() external memberOnly{
+    function quit() external membersOnly{
         Member storage member = members[msg.sender];
         require(block.timestamp - member.joinedAt > 10 minutes, "MIN_MEMBERSHIP_PERIOUD");
         uint256 share = (address(this).balance * member.lockedUpNfts.length)/ totalVotingPower;
@@ -190,4 +190,7 @@ contract CryptoDevsDAO is IERC721Receiver {
         } 
         delete members[msg.sender];
     }
+
+    receive() external payable{}
+    fallback() external payable{}
 }
